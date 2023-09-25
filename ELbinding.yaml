@@ -1,0 +1,12 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerBinding
+metadata:
+  name: flyway-binding
+  namespace: obemfw
+spec:
+  params:
+    - name: gavkey
+      value: $(body.key)
+
+
+      

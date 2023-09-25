@@ -1,0 +1,45 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: TriggerTemplate
+metadata:
+  name: flyway-template
+  namespace: obemfw
+  annotations:
+     tekton.dev/pipelines.metrics: "true"
+spec:
+  params:
+    - name: gavkey
+  resourcetemplates:
+  - apiVersion: tekton.dev/v1beta1
+    kind: PipelineRun
+    metadata:
+      generateName: flyway-pr-
+    spec:
+      serviceAccountName: jfrog-auth
+      pipelineRef:
+        resolver: git
+        params:
+        - name: url
+          value: https://jgladsa_jcplc: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@github.com/jci-products/ds-sre-flyway.git
+        - name: revision
+          value: Flyway-Code
+        - name: pathInRepo
+          value: dev/flyway.yaml
+      workspaces:
+      - name: space
+        #persistentVolumeClaim:
+        #  claimName: tekton-cicd-pvc-1
+        volumeClaimTemplate:
+          metadata:
+            name: resolverpvc
+          spec:
+            accessModes:
+            - ReadWriteOnce
+            resources:  
+              requests:
+                storage: 2Gi
+            storageClassName: flyway-portworx-sc
+            #volumeName: fwpv
+           # persistentVolumeReclaimPolicy: Recycle
+      - name: ssh-creds
+        secret:
+          secretName: git-ssh-key

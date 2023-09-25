@@ -1,0 +1,40 @@
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: fwpv
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Recycle
+  csi:
+    controllerExpandSecretRef:
+      name: px-user-token
+      namespace: portworx
+    driver: pxd.portworx.com
+    fsType: ext4
+    nodePublishSecretRef:
+      name: px-user-token
+      namespace: portworx
+    volumeHandle: "57136204099062307"
+  storageClassName: flyway-portworx-sc
+  
+---
+#apiVersion: v1
+#kind: PersistentVolumeClaim
+#metadata:
+#  name: tekton-cicd-pvc-1
+#  namespace: obemfw
+#spec:
+#  resources:
+#    requests:
+#      storage: 2Gi
+#  #volumeMode: Filesystem
+#  volumeName: fwpv
+#  accessModes:
+#    - ReadWriteOnce
+#  #persistentVolumeReclaimPolicy: Recycle
+#  storageClassName: flyway-portworx-sc

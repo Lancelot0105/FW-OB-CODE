@@ -1,0 +1,53 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: flyway
+spec:
+  params:
+    - name: flyway-db
+      type: string
+  steps:
+    - name: flyway
+      resources:
+        requests:
+          memory: 400Mi
+          cpu: 300m
+        limits:
+          memory: 2Gi
+          cpu: 2000m
+      image: obem-docker-dev-local.jfrog-prod.debsreplatform.cloud/flyway:v1
+      command: ["/bin/sh"]
+      args:
+        - -c
+        - |
+
+          POSTGRES_SA_HOST=$(cat "/workspace/space/secrets/postgres/POSTGRES_SA_HOST")
+          POSTGRES_SA_PORT=$(cat "/workspace/space/secrets/postgres/POSTGRES_SA_PORT")
+          POSTGRES_SA_USERNAME=$(cat "/workspace/space/secrets/postgres/POSTGRES_SA_USERNAME")
+          POSTGRES_SA_PASSWORD=$(cat "/workspace/space/secrets/postgres/POSTGRES_SA_PASSWORD")
+
+          FW_SA_LOCATION=$(cat "/workspace/space/secrets/flyway-cred/FW_SA_LOCATION")
+          FW_OUT_OF_ORDER=$(cat "/workspace/space/secrets/flyway-cred/FW_OUT_OF_ORDER")
+          FW_REPAIR=$(cat "/workspace/space/secrets/flyway-cred/FW_REPAIR")      
+          
+          flyway -url=jdbc:postgresql://$POSTGRES_SA_HOST:$POSTGRES_SA_PORT/$(params.flyway-db)?prepareThreshold=0 -user=$POSTGRES_SA_USERNAME -password=$POSTGRES_SA_PASSWORD -locations=$FW_SA_LOCATION info;
+          #if [ "$REPAIR" = "true" ]; then
+          #  flyway -url="jdbc:postgresql://$POSTGRES_SA_HOST:$POSTGRES_SA_PORT/$(params.flyway-db)?prepareThreshold=0" -user="$POSTGRES_SA_USERNAME" -password="$POSTGRES_SA_PASSWORD" -locations="$FW_SA_LOCATION" repair
+          #  x=1
+          #  if [ $? -ne 0 ]; then
+          #      exit 127
+          #  fi
+          #fi
+
+          #if [ "$OUT_OF_ORDER" = "true" ]; then
+          #  flyway -url="jdbc:postgresql://$POSTGRES_SA_HOST:$POSTGRES_SA_PORT/$(params.flyway-db)?prepareThreshold=0" -user="$POSTGRES_SA_USERNAME" -password="$POSTGRES_SA_PASSWORD" -locations="$FW_SA_LOCATION" -outOfOrder="true" migrate
+          #  x=1
+          #  if [ $? -ne 0 ]; then
+          #      exit 127
+          #  fi
+          #fi
+
+
+
+  workspaces:
+    - name: space

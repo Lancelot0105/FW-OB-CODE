@@ -1,0 +1,15 @@
+apiVersion: triggers.tekton.dev/v1alpha1
+kind: EventListener
+metadata:
+  name: flyway-listener
+  namespace: obemfw
+spec:
+  serviceAccountName: flyway-triggers
+  triggers:
+    - name: trigger
+      bindings:
+        - ref: flyway-binding
+      template:
+        ref: flyway-template
+
+

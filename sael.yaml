@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: flyway-triggers
+  namespace: obemfw  #in service acct, clusterRoleBinding, clusterRole we have to specify the namespace if not it will throws error
+ 
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: flyway-triggers
+  namespace: obemfw
+subjects:
+- kind: ServiceAccount
+  name: flyway-triggers
+  namespace: obemfw                 #here we are mentioning the service acct where we are going to give the clusterrolebinding permission
+roleRef:
+   apiGroup: rbac.authorization.k8s.io
+   kind: ClusterRole
+   name: flyway-triggers          #here we are refering the clusterrole to be binded to the service acct that we mentioned
+---
+kind: ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: flyway-triggers
+rules:
+  # Permissions for every EventListener deployment to function
+  - apiGroups: ["triggers.tekton.dev"]
+    resources: ["eventlisteners", "triggerbindings", "triggertemplates", "triggers", "interceptors", "clusterinterceptors"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # Permissions for ClusterTriggerBindings
+  - apiGroups: ["triggers.tekton.dev"]
+    resources: ["clustertriggerbindings"]
+    verbs: ["get", "list", "watch"]
+  # Permissions for other resources (configmaps, secrets, serviceaccounts, pipelineruns, pipelineresources, taskruns)
+  - apiGroups: [""]
+    resources: ["configmaps", "secrets", "serviceaccounts"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["tekton.dev"]
+    resources: ["pipelineruns", "pipelineresources", "taskruns"]
+    verbs: ["create"]                                                 #here we have the permissions for the clusterRole

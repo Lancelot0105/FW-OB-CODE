@@ -1,0 +1,74 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: fwvaultval
+  namespace: obemfw
+spec: 
+  params:
+    - name: subdirectory
+    - name: vault_path
+  description: Get all secrets from vault that are required for the entire pipeline.
+
+  stepTemplate:
+    env:
+      - name: WORKSPACE_SOURCE_PATH
+        value: $(workspaces.space.path)
+      - name: SUBDIRECTORY
+        value: $(params.subdirectory)
+      - name: PARAM_VAULT_PATH
+        value: $(params.vault_path)
+      - name: VAULT_ADDR
+        valueFrom:
+          secretKeyRef:
+            name: vault-cred
+            key: VAULT_ADDR
+      - name: VAULT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: vault-cred
+            key: VAULT_TOKEN
+  steps:
+    - name: read
+      image: obem-docker-dev-local.jfrog-prod.debsreplatform.cloud/vault:1.13.3
+      script: |
+        #!/usr/bin/env sh
+        echo "--------------------------"
+        echo "Getting secrets from vault"
+        echo "--------------------------"
+        
+        CHECKOUT_DIR="${WORKSPACE_SOURCE_PATH}/${SUBDIRECTORY}"
+
+        mkdir -p "${CHECKOUT_DIR}"
+
+        cd "${CHECKOUT_DIR}"
+
+        mkdir -p flyway-cred
+        mkdir -p postgres
+
+        echo "Getting secrets of Flyway-Cred..."
+        FW_SA_LOCATION=$(vault kv get -field=fw-sa-location $PARAM_VAULT_PATH/flyway-cred)
+        FW_OUT_OF_ORDER=$(vault kv get -field=fw-out-of-order $PARAM_VAULT_PATH/flyway-cred)
+        FW_REPAIR=$(vault kv get -field=fw-repair $PARAM_VAULT_PATH/flyway-cred)
+
+        echo $FW_OUT_OF_ORDER > flyway-cred/FW_OUT_OF_ORDER
+        echo $FW_SA_LOCATION > flyway-cred/FW_SA_LOCATION
+        echo $FW_REPAIR > flyway-cred/FW_REPAIR 
+
+        echo "------------------------------------------------------------------"
+
+        echo "Getting secrets of Postgres..."
+        POSTGRES_SA_HOST=$(vault kv get -field=pg-host $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_PORT=$(vault kv get -field=pg-port $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_USERNAME=$(vault kv get -field=pg-username $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_PASSWORD=$(vault kv get -field=pg-password $PARAM_VAULT_PATH/postgres)  
+
+        echo $POSTGRES_SA_HOST > postgres/POSTGRES_SA_HOST
+        echo $POSTGRES_SA_PORT > postgres/POSTGRES_SA_PORT
+        echo $POSTGRES_SA_USERNAME > postgres/POSTGRES_SA_USERNAME
+        echo $POSTGRES_SA_PASSWORD > postgres/POSTGRES_SA_PASSWORD
+
+        chmod -R 777 /workspace/space 
+  
+  workspaces:
+    - description: Workspace
+      name: space

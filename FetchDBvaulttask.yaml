@@ -1,0 +1,85 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: vault-postgres-git-task
+spec: 
+  params:
+    - name: subdirectory
+    - name: vault_path
+
+  description: Get all secrets from vault that are required for the entire pipeline.
+  stepTemplate:
+    env:
+      - name: WORKSPACE_SOURCE_PATH
+        value: $(workspaces.source.path)
+      - name: PARAM_SUBDIRECTORY
+        value: $(params.subdirectory)
+      - name: PARAM_VAULT_PATH
+        value: $(params.vault_path)
+      - name: VAULT_ADDR
+        valueFrom:
+          secretKeyRef:
+            name: vault-cred
+            key: VAULT_ADDR
+      - name: VAULT_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: vault-cred
+            key: VAULT_TOKEN
+  steps:
+    - name: read
+      image: obem-docker-dev-local.jfrog-prod.debsreplatform.cloud/vault:1.13.3
+      script: |
+        #!/usr/bin/env sh
+        echo "--------------------------"
+        echo "Getting secrets from vault"
+        echo "--------------------------"
+
+        CHECKOUT_DIR="${WORKSPACE_SOURCE_PATH}/${PARAM_SUBDIRECTORY}"
+        mkdir -p "${CHECKOUT_DIR}"
+        pwd
+        cd "${CHECKOUT_DIR}"
+
+        mkdir -p git
+        mkdir -p postgres
+
+        echo "Getting secrets for Github..."
+        GITHUB_SA_USERNAME=$(vault kv get -field=git-username $PARAM_VAULT_PATH/git)
+        GITHUB_SA_EMAIL=$(vault kv get -field=git-email $PARAM_VAULT_PATH/git)
+        GITHUB_SA_PAT=$(vault kv get -field=git-password $PARAM_VAULT_PATH/git)
+        GITHUB_SA_PUSHCRED=$(vault kv get -field=git-push-cred $PARAM_VAULT_PATH/git)
+        GITHUB_SA_FW_SCRIPT_LOCATION=$(vault kv get -field=git-fw-script-location $PARAM_VAULT_PATH/git)
+        FLYWAY_SCRIPT_BRANCH=$(vault kv get -field=flyway-scripts-branch $PARAM_VAULT_PATH/git)
+        FLYWAY_VAULT_PATH=$(vault kv get -field=flyway-vault-path $PARAM_VAULT_PATH/git)
+        BATCH_SIZE=$(vault kv get -field=batch-size $PARAM_VAULT_PATH/git)
+
+        echo $GITHUB_SA_USERNAME > git/GITHUB_SA_USERNAME
+        echo $GITHUB_SA_EMAIL > git/GITHUB_SA_EMAIL
+        echo $GITHUB_SA_PAT > git/GITHUB_SA_PAT
+        echo $GITHUB_SA_PUSHCRED > git/GITHUB_SA_PUSHCRED
+        echo $GITHUB_SA_FW_SCRIPT_LOCATION > git/GITHUB_SA_FW_SCRIPT_LOCATION
+        echo $FLYWAY_SCRIPT_BRANCH > git/FLYWAY_SCRIPT_BRANCH
+        echo $FLYWAY_VAULT_PATH > git/FLYWAY_VAULT_PATH
+        echo $BATCH_SIZE > git/BATCH_SIZE
+
+        echo "------------------------------------------------------------------"
+
+        echo "Getting secrets for Postgres-DB..."
+        POSTGRES_SA_HOST=$(vault kv get -field=pg-host $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_PORT=$(vault kv get -field=pg-port $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_DBNAME=$(vault kv get -field=pg-dbname $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_USERNAME=$(vault kv get -field=pg-username $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_PASSWORD=$(vault kv get -field=pg-password $PARAM_VAULT_PATH/postgres)
+        POSTGRES_SA_TABLENAME=$(vault kv get -field=pg-tablename $PARAM_VAULT_PATH/postgres)   
+
+        echo $POSTGRES_SA_HOST > postgres/POSTGRES_SA_HOST
+        echo $POSTGRES_SA_PORT > postgres/POSTGRES_SA_PORT
+        echo $POSTGRES_SA_DBNAME > postgres/POSTGRES_SA_DBNAME
+        echo $POSTGRES_SA_USERNAME > postgres/POSTGRES_SA_USERNAME
+        echo $POSTGRES_SA_PASSWORD > postgres/POSTGRES_SA_PASSWORD
+        echo $POSTGRES_SA_TABLENAME > postgres/POSTGRES_SA_TABLENAME
+
+  workspaces:
+    - name: source
+
+    

@@ -1,0 +1,148 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: fetchdb
+spec:
+  steps:
+    - name: build-sources
+      image: obem-docker-dev-local.jfrog-prod.debsreplatform.cloud/flyway-custom-image:v1
+      script: |
+        #!/bin/bash
+
+        GITHUB_SA_USERNAME=$(cat "/workspace/source/secrets/git/GITHUB_SA_USERNAME")
+        GITHUB_SA_EMAIL=$(cat "/workspace/source/secrets/git/GITHUB_SA_EMAIL")
+        GITHUB_SA_PAT=$(cat "/workspace/source/secrets/git/GITHUB_SA_PAT")
+        GITHUB_SA_PUSHCRED=$(cat "/workspace/source/secrets/git/GITHUB_SA_PUSHCRED")
+        GITHUB_SA_PAT=$(cat "/workspace/source/secrets/git/GITHUB_SA_PAT")
+        GITHUB_SA_FW_SCRIPT_LOCATION=$(cat "/workspace/source/secrets/git/GITHUB_SA_FW_SCRIPT_LOCATION")
+        FLYWAY_SCRIPT_BRANCH=$(cat "/workspace/source/secrets/git/FLYWAY_SCRIPT_BRANCH")
+        FLYWAY_VAULT_PATH=$(cat "/workspace/source/secrets/git/FLYWAY_VAULT_PATH")
+        BATCH_SIZE=$(cat "/workspace/source/secrets/git/BATCH_SIZE")
+
+        POSTGRES_SA_HOST=$(cat "/workspace/source/secrets/postgres/POSTGRES_SA_HOST")
+        POSTGRES_SA_PORT=$(cat "/workspace/source/secrets/postgres/POSTGRES_SA_PORT")
+        POSTGRES_SA_DBNAME=$(cat "/workspace/source/secrets/postgres/POSTGRES_SA_DBNAME")
+        POSTGRES_SA_USERNAME=$(cat "/workspace/source/secrets/postgres/POSTGRES_SA_USERNAME")
+        POSTGRES_SA_PASSWORD=$(cat "/workspace/source/secrets/postgres/POSTGRES_SA_PASSWORD")
+        POSTGRES_SA_TABLENAME=$(cat "/workspace/source/secrets/postgres/POSTGRES_SA_TABLENAME")
+
+    
+        psql "host=$POSTGRES_SA_HOST port=$POSTGRES_SA_PORT dbname=$POSTGRES_SA_DBNAME user=$POSTGRES_SA_USERNAME password=$POSTGRES_SA_PASSWORD sslmode=require" -t -c "(Select distinct databasename from organization where ServerName is not null and databasename not Ilike '%Auto%' and databasename NOT Ilike '%test%' union Select 'Master_Copy');" >> dblist.txt && cat dblist.txt
+        cat dblist.txt | tr '\n' ' ' > db-names-array.txt 
+        db_names=$(cat db-names-array.txt) 
+        IFS=' ' read -r -a main_array <<< "$db_names"
+
+        rm dblist.txt
+        rm db-names-array.txt
+
+        # Batch size
+        batch_size=$BATCH_SIZE
+
+        id=0
+
+        output_file="flyway.yaml"  # Define the output file name
+
+        # Redirect the output to the output file
+        {
+          echo "apiVersion: tekton.dev/v1beta1"
+          echo "kind: Pipeline"
+          echo "metadata:"
+          echo "  name: Flyway-Pipeline"
+          echo "spec:"
+          echo "  workspaces:"
+          echo "    - name: space"
+          echo "    - name: ssh-creds"
+          echo "  tasks:"
+          echo "  - name: fwvaultval"
+          echo "    taskRef:"
+          echo "      name: fwvaultval"
+          echo "    workspaces:"
+          echo "    - name: space"
+          echo "      workspace: space"
+          echo "    params:"
+          echo "      - name: subdirectory"
+          echo "        value: "secrets""
+          echo "      - name: vault_path"
+          echo "        value: $FLYWAY_VAULT_PATH"
+
+          echo "  - name: fetch-source"
+          echo "    taskRef:"
+          echo "      name: git-clone"
+          echo "    runAfter:"
+          echo "      - fwvaultval"
+          echo "    workspaces:"
+          echo "    - name: output"
+          echo "      workspace: space"
+          echo "    - name: basic-auth"
+          echo "      workspace: ssh-creds"
+          echo "    params:"
+          echo "    - name: url"
+          echo "      value: $GITHUB_SA_FW_SCRIPT_LOCATION"
+          echo "    - name: deleteExisting"
+          echo "      value: "false"" 
+          echo "    - name: revision"
+          echo "      value: $FLYWAY_SCRIPT_BRANCH" 
+        } > "$output_file"
+
+
+        # Loop over ARRAYs :)
+      
+        array_length=${#main_array[@]}
+        for (( start=0; start<array_length; start+=batch_size )); do
+        #TEMP ARRAYYYYYYY
+          temp_array=("${main_array[@]:start:batch_size}")
+
+          param_string=""
+          for element in "${temp_array[@]}"; do
+            if [ -n "$param_string" ]; then
+              param_string+=","
+            fi
+            param_string+="\"$element\""
+        done
+
+
+          # Remove the trailing comma
+          param_string=${param_string% }
+
+          echo "  - name: arr$id"
+          echo "    taskRef:"
+          echo "      name: flyway"
+          if [ $id -lt 1 ]; then
+            echo "    runAfter:"
+            echo "      - fetch-source"
+          fi
+          if [ $id -gt 0 ]; then
+            echo "    runAfter:"
+            echo "      - arr$((id-1))"
+          fi
+
+          echo "    workspaces:"
+          echo "    - name: space"
+          echo "      workspace: space"
+          echo "    matrix:"
+          echo "      params:"
+          echo "        - name: flyway-db"
+          echo "          value: [$param_string]"
+
+          unset temp_array
+          id=$((id+1))
+        done >> "$output_file"
+
+        cat flyway.yaml
+
+        # Push the created flyway yaml file to git, As our interceptor will later fetch it and execute it :)
+        git clone -b Flyway-Code $GITHUB_SA_PUSHCRED
+        mv flyway.yaml ./ds-sre-flyway/dev/
+        cd ds-sre-flyway
+        git config --global user.email $GITHUB_SA_EMAIL
+        git config --global user.name $GITHUB_SA_USERNAME
+        git add .
+        git commit -m "flyway commit"
+        git remote -v
+        git push $GITHUB_SA_PUSHCRED Flyway-Code
+
+        curl -X POST -H "Content-Type: application/json" -d '{"key":"ola"}' http://el-flyway-listener.obemfw:8080
+
+  workspaces:
+    - name: source
+    

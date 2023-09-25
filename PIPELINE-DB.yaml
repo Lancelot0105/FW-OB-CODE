@@ -1,0 +1,39 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+    generateName: flyway-pr-
+spec:
+  serviceAccountName: jfrog-auth
+  pipelineSpec:
+    workspaces:
+    - name: source
+    tasks:
+      - name: vault-postgres-git-task
+        taskRef:
+          name: vault-postgres-git-task
+        workspaces:
+          - name: source
+            workspace: source
+        params:
+          - name: subdirectory
+            value: "secrets"
+          - name: vault_path
+            value: "OBEM/flyway"
+      - name: fetchdb
+        taskRef:
+          name: fetchdb
+        runAfter:
+          - vault-postgres-git-task
+        workspaces:
+          - name: source
+            workspace: source
+
+  workspaces:
+  - name: source
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 2Gi 
